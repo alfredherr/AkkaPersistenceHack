@@ -19,17 +19,17 @@ namespace test_akka_persistence.CustomDataStore
     public class AlfredosLocalSnapshotStore : SnapshotStore
     {
         private static readonly Regex FilenameRegex = new Regex(@"^snapshot-(.+)-(\d+)-(\d+)", RegexOptions.Compiled);
+
+        private readonly string _defaultSerializer;
         private readonly DirectoryInfo _dir;
+
+        private readonly ILoggingAdapter _log;
 
         private readonly int _maxLoadAttempts;
         private readonly ISet<SnapshotMetadata> _saving;
 
         private readonly Serialization _serialization;
         private readonly MessageDispatcher _streamDispatcher;
-
-        private readonly string _defaultSerializer;
-
-        private readonly ILoggingAdapter _log;
 
         /// <summary>
         ///     TBD
