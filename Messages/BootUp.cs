@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace test_akka_persistence
+namespace test_akka_persistence.Messages
 {
     public class BootUp
     {

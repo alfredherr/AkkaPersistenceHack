@@ -10,27 +10,29 @@ using Akka.Dispatch;
 using Akka.Event;
 using Akka.Logger.Serilog;
 using Akka.Persistence;
+using Akka.Persistence.Serialization;
 using Akka.Persistence.Snapshot;
-using Serialization = Akka.Persistence.Serialization;
+using Akka.Serialization;
 
 namespace test_akka_persistence.CustomDataStore
 {
-    
     public class AlfredosLocalSnapshotStore : SnapshotStore
     {
         private static readonly Regex FilenameRegex = new Regex(@"^snapshot-(.+)-(\d+)-(\d+)", RegexOptions.Compiled);
-        
-        private readonly int _maxLoadAttempts;
-        private readonly MessageDispatcher _streamDispatcher;
         private readonly DirectoryInfo _dir;
+
+        private readonly int _maxLoadAttempts;
         private readonly ISet<SnapshotMetadata> _saving;
 
-        private readonly Akka.Serialization.Serialization _serialization;
+        private readonly Serialization _serialization;
+        private readonly MessageDispatcher _streamDispatcher;
 
-        private string _defaultSerializer;
+        private readonly string _defaultSerializer;
+
+        private readonly ILoggingAdapter _log;
 
         /// <summary>
-        /// TBD
+        ///     TBD
         /// </summary>
         public AlfredosLocalSnapshotStore()
         {
@@ -47,13 +49,10 @@ namespace test_akka_persistence.CustomDataStore
             _log = Context.GetLogger<SerilogLoggingAdapter>();
 
             _log.Info($"instantiated - in constructor.");
-
         }
 
-        private ILoggingAdapter _log;
-
         /// <summary>
-        /// TBD
+        ///     TBD
         /// </summary>
         /// <param name="persistenceId">TBD</param>
         /// <param name="criteria">TBD</param>
@@ -68,12 +67,13 @@ namespace test_akka_persistence.CustomDataStore
             // This may help in situations where saving of a snapshot could not be completed because of a VM crash.
             // Hence, an attempt to load that snapshot will fail but loading an older snapshot may succeed.
             //
-            var metadata = GetSnapshotMetadata(persistenceId, criteria).Reverse().Take(_maxLoadAttempts).Reverse().ToImmutableArray();
+            var metadata = GetSnapshotMetadata(persistenceId, criteria).Reverse().Take(_maxLoadAttempts).Reverse()
+                .ToImmutableArray();
             return RunWithStreamDispatcher(() => Load(metadata));
         }
 
         /// <summary>
-        /// TBD
+        ///     TBD
         /// </summary>
         /// <param name="metadata">TBD</param>
         /// <param name="snapshot">TBD</param>
@@ -90,7 +90,7 @@ namespace test_akka_persistence.CustomDataStore
         }
 
         /// <summary>
-        /// TBD
+        ///     TBD
         /// </summary>
         /// <param name="metadata">TBD</param>
         /// <returns>TBD</returns>
@@ -103,16 +103,13 @@ namespace test_akka_persistence.CustomDataStore
                 // multiple snapshot files here mean that there were multiple snapshots for this seqNr, we delete all of them
                 // usually snapshot-stores would keep one snapshot per sequenceNr however here in the file-based one we timestamp
                 // snapshots and allow multiple to be kept around (for the same seqNr) if desired
-                foreach (var file in GetSnapshotFiles(metadata))
-                {
-                    file.Delete();
-                }
+                foreach (var file in GetSnapshotFiles(metadata)) file.Delete();
                 return new object();
             });
         }
 
         /// <summary>
-        /// TBD
+        ///     TBD
         /// </summary>
         /// <param name="persistenceId">TBD</param>
         /// <param name="criteria">TBD</param>
@@ -121,14 +118,11 @@ namespace test_akka_persistence.CustomDataStore
         {
             _log.Info($"DeleteAsync({persistenceId},{criteria}) called.");
 
-            foreach (var metadata in GetSnapshotMetadata(persistenceId, criteria))
-            {
-                await DeleteAsync(metadata);
-            }
+            foreach (var metadata in GetSnapshotMetadata(persistenceId, criteria)) await DeleteAsync(metadata);
         }
 
         /// <summary>
-        /// TBD
+        ///     TBD
         /// </summary>
         /// <param name="message">TBD</param>
         /// <returns>TBD</returns>
@@ -138,7 +132,7 @@ namespace test_akka_persistence.CustomDataStore
 
             if (message is SaveSnapshotSuccess)
             {
-                _saving.Remove(((SaveSnapshotSuccess)message).Metadata);
+                _saving.Remove(((SaveSnapshotSuccess) message).Metadata);
             }
             else if (message is SaveSnapshotFailure)
             {
@@ -156,6 +150,7 @@ namespace test_akka_persistence.CustomDataStore
             {
                 return false;
             }
+
             return true;
         }
 
@@ -170,71 +165,55 @@ namespace test_akka_persistence.CustomDataStore
         {
             var last = metadata.LastOrDefault();
             if (last == null)
-            {
                 return null;
-            }
-            else
+            try
             {
-                try
+                return WithInputStream(last, stream =>
                 {
-                    return WithInputStream(last, stream =>
-                    {
-                        var snapshot = Deserialize(stream);
+                    var snapshot = Deserialize(stream);
 
-                        return new SelectedSnapshot(last, snapshot.Data);
-                    });
-                }
-                catch (Exception ex)
-                {
-                    var remaining = metadata.RemoveAt(metadata.Length - 1);
-                    _log.Error(ex, $"Error loading snapshot [{last}], remaining attempts: [{remaining.Length}]");
-                    if (remaining.IsEmpty)
-                    {
-                        throw;
-                    }
-                    else
-                    {
-                        return Load(remaining);
-                    }
-                }
+                    return new SelectedSnapshot(last, snapshot.Data);
+                });
+            }
+            catch (Exception ex)
+            {
+                var remaining = metadata.RemoveAt(metadata.Length - 1);
+                _log.Error(ex, $"Error loading snapshot [{last}], remaining attempts: [{remaining.Length}]");
+                if (remaining.IsEmpty)
+                    throw;
+                return Load(remaining);
             }
         }
 
         /// <summary>
-        /// TBD
+        ///     TBD
         /// </summary>
         /// <param name="metadata">TBD</param>
         /// <param name="snapshot">TBD</param>
         protected virtual void Save(SnapshotMetadata metadata, object snapshot)
         {
-            var tempFile = WithOutputStream(metadata, stream =>
-            {
-                Serialize(stream, new Serialization.Snapshot(snapshot));
-            });
+            var tempFile = WithOutputStream(metadata, stream => { Serialize(stream, new Snapshot(snapshot)); });
             var newName = GetSnapshotFileForWrite(metadata);
-            if (File.Exists(newName.FullName))
-            {
-                File.Delete(newName.FullName);
-            }
+            if (File.Exists(newName.FullName)) File.Delete(newName.FullName);
             tempFile.MoveTo(newName.FullName);
         }
 
-        private Serialization.Snapshot Deserialize(Stream stream)
+        private Snapshot Deserialize(Stream stream)
         {
             var buffer = new byte[stream.Length];
             stream.Read(buffer, 0, buffer.Length);
-            var snapshotType = typeof(Serialization.Snapshot);
+            var snapshotType = typeof(Snapshot);
             var serializer = _serialization.FindSerializerForType(snapshotType, _defaultSerializer);
-            var snapshot = (Serialization.Snapshot)serializer.FromBinary(buffer, snapshotType);
+            var snapshot = (Snapshot) serializer.FromBinary(buffer, snapshotType);
             return snapshot;
         }
 
         /// <summary>
-        /// TBD
+        ///     TBD
         /// </summary>
         /// <param name="stream">TBD</param>
         /// <param name="snapshot">TBD</param>
-        protected void Serialize(Stream stream, Serialization.Snapshot snapshot)
+        protected void Serialize(Stream stream, Snapshot snapshot)
         {
             var serializer = _serialization.FindSerializerFor(snapshot, _defaultSerializer);
             var bytes = serializer.ToBinary(snapshot);
@@ -242,7 +221,7 @@ namespace test_akka_persistence.CustomDataStore
         }
 
         /// <summary>
-        /// TBD
+        ///     TBD
         /// </summary>
         /// <param name="metadata">TBD</param>
         /// <param name="p">TBD</param>
@@ -282,17 +261,19 @@ namespace test_akka_persistence.CustomDataStore
         // only by PersistenceId and SequenceNr, timestamp is informational - accommodates for older files
         private FileInfo GetSnapshotFileForWrite(SnapshotMetadata metadata, string extension = "")
         {
-            var filename = $"snapshot-{Uri.EscapeDataString(metadata.PersistenceId)}-{metadata.SequenceNr}-{metadata.Timestamp.Ticks}{extension}";
+            var filename =
+                $"snapshot-{Uri.EscapeDataString(metadata.PersistenceId)}-{metadata.SequenceNr}-{metadata.Timestamp.Ticks}{extension}";
             return new FileInfo(Path.Combine(GetSnapshotDir().FullName, filename));
         }
 
-        private IEnumerable<SnapshotMetadata> GetSnapshotMetadata(string persistenceId, SnapshotSelectionCriteria criteria)
+        private IEnumerable<SnapshotMetadata> GetSnapshotMetadata(string persistenceId,
+            SnapshotSelectionCriteria criteria)
         {
-            
             var snapshots = GetSnapshotDir()
                 .EnumerateFiles("snapshot-" + Uri.EscapeDataString(persistenceId) + "-*", SearchOption.TopDirectoryOnly)
                 .Select(ExtractSnapshotMetadata)
-                .Where(metadata => metadata != null && IsMatch(criteria,metadata) && !_saving.Contains(metadata)).ToList();
+                .Where(metadata => metadata != null && IsMatch(criteria, metadata) && !_saving.Contains(metadata))
+                .ToList();
 
             snapshots.Sort(SnapshotMetadata.Comparer);
 
@@ -304,6 +285,7 @@ namespace test_akka_persistence.CustomDataStore
             return metadata.SequenceNr <= criteria.MaxSequenceNr && metadata.Timestamp <= criteria.MaxTimeStamp &&
                    metadata.SequenceNr >= criteria.MinSequenceNr && metadata.Timestamp >= criteria.MinTimestamp;
         }
+
         private SnapshotMetadata ExtractSnapshotMetadata(FileInfo fileInfo)
         {
             var match = FilenameRegex.Match(fileInfo.Name);
@@ -315,16 +297,14 @@ namespace test_akka_persistence.CustomDataStore
 
                 long sequenceNr, ticks;
                 if (long.TryParse(seqNrString, out sequenceNr) && long.TryParse(timestampTicks, out ticks))
-                {
                     return new SnapshotMetadata(pid, sequenceNr, new DateTime(ticks));
-                }
             }
 
             return null;
         }
 
         /// <summary>
-        /// TBD
+        ///     TBD
         /// </summary>
         protected override void PreStart()
         {
@@ -332,16 +312,19 @@ namespace test_akka_persistence.CustomDataStore
             GetSnapshotDir();
             base.PreStart();
         }
+
         protected override void PostStop()
         {
             _log.Info($"PostStop() called.");
             base.PostStop();
         }
+
         protected override SupervisorStrategy SupervisorStrategy()
         {
             _log.Info($"SupervisorStrategy() called.");
             return base.SupervisorStrategy();
         }
+
         private DirectoryInfo GetSnapshotDir()
         {
             if (!_dir.Exists || (_dir.Attributes & FileAttributes.Directory) == 0)
@@ -361,11 +344,11 @@ namespace test_akka_persistence.CustomDataStore
                 {
                     _dir.Refresh();
                 }
-                if (exception != null || ((_dir.Attributes & FileAttributes.Directory) == 0))
-                {
+
+                if (exception != null || (_dir.Attributes & FileAttributes.Directory) == 0)
                     throw new IOException("Failed to create snapshot directory " + _dir.FullName, exception);
-                }
             }
+
             return _dir;
         }
 
@@ -390,6 +373,7 @@ namespace test_akka_persistence.CustomDataStore
                     return false;
                 }
             }
+
             return false;
         }
 
@@ -413,5 +397,4 @@ namespace test_akka_persistence.CustomDataStore
             return promise.Task;
         }
     }
-
 }

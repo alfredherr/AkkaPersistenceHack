@@ -3,13 +3,12 @@ using Akka.Actor;
 using Akka.Event;
 using Akka.Logger.Serilog;
 using Akka.Persistence;
+using test_akka_persistence.Messages;
 
-namespace test_akka_persistence
+namespace test_akka_persistence.Actors
 {
-    class SaverActor : ReceivePersistentActor
+    internal class SaverActor : ReceivePersistentActor
     {
-        public override string PersistenceId => Self.Path.Name;
-
         private readonly ILoggingAdapter _log = Context.GetLogger<SerilogLoggingAdapter>();
 
         public SaverActor()
@@ -37,22 +36,26 @@ namespace test_akka_persistence
             CommandAny(cmd => _log.Error($"In {Self.Path.Name} processing CommandAny msg. {cmd}"));
         }
 
+        public override string PersistenceId => Self.Path.Name;
+
+        public override Recovery Recovery => base.Recovery;
+
+        public override IStashOverflowStrategy InternalStashOverflowStrategy => base.InternalStashOverflowStrategy;
+
         private void _ProcessSnapshot(SnapshotOffer offer)
         {
             _log.Info($"In {Self.Path.Name} on _ProcessSnapshot({offer})");
-            
         }
 
         private void _BootUp(BootUp command)
         {
             _log.Info($"In {Self.Path.Name} on _BootUp({command})");
             _TakeSnapshot();
-
-
         }
+
         private void _SaveEvent(SaveAnEvent cmd)
         {
-            PersistedEvent @event  = new PersistedEvent($"Event {LastSequenceNr} @ {DateTime.Now}");
+            var @event = new PersistedEvent($"Event {LastSequenceNr} @ {DateTime.Now}");
 
             Persist(@event, e =>
             {
@@ -65,16 +68,16 @@ namespace test_akka_persistence
         {
             SaveSnapshot($"Snapshot This! @ {DateTime.Now}");
             _log.Info($"In {Self.Path.Name} on _TakeSnapshot() - first");
-           
         }
+
         private void _RemoveOldSnapshots(SaveSnapshotSuccess cmd)
         {
             _log.Info($"In {Self.Path.Name} SaveSnapshotSuccess msg. {cmd}");
-            _log.Info($"In {Self.Path.Name} _RemoveOldSnapshots() - cmd.Metadata.SequenceNr: {cmd.Metadata.SequenceNr}");
+            _log.Info(
+                $"In {Self.Path.Name} _RemoveOldSnapshots() - cmd.Metadata.SequenceNr: {cmd.Metadata.SequenceNr}");
             Console.WriteLine($"cmd.Metadata.SequenceNr: {cmd.Metadata.SequenceNr} LastSequenceNr: {LastSequenceNr}");
-            
+
             DeleteSnapshots(new SnapshotSelectionCriteria(cmd.Metadata.SequenceNr - 1));
-            
         }
 
         public override void AroundPostRestart(Exception reason, object message)
@@ -175,15 +178,12 @@ namespace test_akka_persistence
             //_log.Info($"In {Self.Path.Name} on Unhandled({message.GetType().Name} {message})");
             base.Unhandled(message);
         }
-
-        public override Recovery Recovery => base.Recovery;
-
-        public override IStashOverflowStrategy InternalStashOverflowStrategy => base.InternalStashOverflowStrategy;
     }
 
     internal class TakeSnapshot
     {
     }
+
     internal class SaveAnEvent
     {
     }
