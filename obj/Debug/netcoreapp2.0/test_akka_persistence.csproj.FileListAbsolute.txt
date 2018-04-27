@@ -1,0 +1,12 @@
+C:\dev\test_akka_persistence\bin\Debug\netcoreapp2.0\appsettings.json
+C:\dev\test_akka_persistence\bin\Debug\netcoreapp2.0\Configuration\HOCONConfiguration.hocon
+C:\dev\test_akka_persistence\bin\Debug\netcoreapp2.0\test_akka_persistence.deps.json
+C:\dev\test_akka_persistence\bin\Debug\netcoreapp2.0\test_akka_persistence.runtimeconfig.json
+C:\dev\test_akka_persistence\bin\Debug\netcoreapp2.0\test_akka_persistence.runtimeconfig.dev.json
+C:\dev\test_akka_persistence\bin\Debug\netcoreapp2.0\test_akka_persistence.dll
+C:\dev\test_akka_persistence\bin\Debug\netcoreapp2.0\test_akka_persistence.pdb
+C:\dev\test_akka_persistence\obj\Debug\netcoreapp2.0\test_akka_persistence.csproj.CoreCompileInputs.cache
+C:\dev\test_akka_persistence\obj\Debug\netcoreapp2.0\test_akka_persistence.AssemblyInfoInputs.cache
+C:\dev\test_akka_persistence\obj\Debug\netcoreapp2.0\test_akka_persistence.AssemblyInfo.cs
+C:\dev\test_akka_persistence\obj\Debug\netcoreapp2.0\test_akka_persistence.dll
+C:\dev\test_akka_persistence\obj\Debug\netcoreapp2.0\test_akka_persistence.pdb

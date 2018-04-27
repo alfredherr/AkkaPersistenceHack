@@ -1,0 +1,87 @@
+﻿akka 
+ {
+    actor 
+    {
+     serializers 
+        {
+          hyperion = "Akka.Serialization.HyperionSerializer, Akka.Serialization.Hyperion" 
+        }
+        serialization-bindings 
+        {
+            "System.Object" = hyperion
+        }
+    }
+}            
+ 
+akka.actor.debug.lifecycle = off
+akka.actor.debug.unhandled = off
+
+
+akka.loglevel = Info
+
+loggers=["Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog"]
+ 
+### Alfredo Snapshotter ###
+akka.persistence.snapshot-store.plugin = "akka.persistence.snapshot-store.alfredo-snapshoter"
+akka.persistence.snapshot-store.alfredo-snapshoter {
+	# Class name of the plugin.
+		class = "test_akka_persistence.CustomDataStore.AlfredosLocalSnapshotStore, test_akka_persistence"
+    # Dispatcher for the plugin actor.
+		plugin-dispatcher = "akka.persistence.dispatchers.default-plugin-dispatcher"
+    # Dispatcher for streaming snapshot IO.
+		stream-dispatcher = "akka.persistence.dispatchers.default-stream-dispatcher"
+    # Storage location of snapshot files.
+		dir = "snapshots"
+    # Number load attempts when recovering from the latest snapshot fails
+    # yet older snapshot files are available. Each recovery attempt will try
+    # to recover using an older than previously failed-on snapshot file
+    # (if any are present). If all attempts fail the recovery will fail and
+    # the persistent actor will be stopped.
+		max-load-attempts = 1
+}
+
+akka.persistence{
+
+	journal {
+		plugin = "akka.persistence.journal.sqlite"
+		sqlite {
+		
+			# qualified type name of the SQLite persistence journal actor
+			class = "Akka.Persistence.Sqlite.Journal.SqliteJournal, Akka.Persistence.Sqlite"
+
+			# dispatcher used to drive journal actor
+			plugin-dispatcher = "akka.actor.default-dispatcher"
+
+			# connection string used for database access
+			connection-string = "Data Source=mydb.db;"
+			
+			# connection string name for .config file used when no connection string has been provided
+			connection-string-name = ""
+
+			# default SQLite commands timeout
+			connection-timeout = 3000s
+
+			# SQLite table corresponding with persistent journal
+			table-name = event_journal
+			
+			# metadata table
+			metadata-table-name = journal_metadata
+
+			# should corresponding journal table be initialized automatically
+			auto-initialize = on
+
+			# timestamp provider used for generation of journal entries timestamps
+			timestamp-provider = "Akka.Persistence.Sql.Common.Journal.DefaultTimestampProvider, Akka.Persistence.Sql.Common"
+			
+			circuit-breaker {
+				max-failures = 5
+				call-timeout = 20s
+				reset-timeout = 60s
+			}
+		}
+	}
+
+ 
+## Akka Persistence Journal Defaults
+akka.persistence.journal-plugin.recovery-event-timeout = 1201s
+akka.persistence.journal-plugin-fallback.recovery-event-timeout = 1200s
